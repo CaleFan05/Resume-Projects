@@ -1,0 +1,106 @@
+---
+title: "Project 1"
+format:
+  typst:
+    fig-format: png
+    fig-dpi: 300
+    fig-width: 6
+    fig-height: 4
+---
+
+```{r}
+#| echo: false
+#| message: false
+# !! Do not edit this code chunk !!
+library(tidyverse)
+```
+
+This is the dataset you will be working with:
+
+```{r}
+#| message: false
+olympics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-07-27/olympics.csv')
+
+triathlon <- olympics |> 
+  filter(!is.na(height)) |>             # only keep athletes with known height
+  filter(sport == "Triathlon") |>       # keep only triathletes
+  mutate(
+    medalist = case_when(                # add column to track medalist vs not
+      is.na(medal) ~ "non-medalist",
+      !is.na(medal) ~ "medalist"         # any medals (Gold, Silver, Bronze) count
+    )
+  )
+```
+
+**Introduction:**
+
+In this project, we use the triathlon dataset. It is a subset of the Olympics dataset made by Jon Harmon, which includes various data points on athletes in the modern olympic games from 1896 to 2018. More information about the `olympics` dataset can be found on the [tidytuesday project](https://github.com/rfordatascience/tidytuesday/tree/master/data/2021/2021-07-27/readme.md) and on [Olympedia.](https://www.olympedia.org/) Triathlon only contains rows with triathletes. We are trying to answer the following questions:
+
+1.  In how many events total did male and female triathletes compete for each country?
+
+2.  Are there height differences among triathletes between sexes or over time?
+
+3.  Are there height differences among triathletes that have medaled or not, again also considering athlete sex?
+
+Looking at these questions, we can see that the relevant variables are team (country), sex, height, year, and medalist (did they win a medal? yes or no).
+
+**Approach:** *To tackle question 1 we make 2 bar charts: one for female athletes, and one for male. The y-axis represents the athletes' country, and the length of the bar along the x-axis represents the total number of events participated in for that country/sex pairing. Breaking it down like this allows us to easily visually compare these event totals country to country.*
+
+*For question 2 we again make 2 charts for each sex. This time, each chart has one box-plot for every year with a triathlon event shown along the axis, and the y-axis shows the height. The boxplots are handy for comparison since we can easily see any major changes in the distributions of height. You can compare medians, range, IQR and much more.*
+
+*Lastly in part 3, we use a violin plots overlaid with sina plots to compare height distributions among medalists vs non-medalists (again split by sex). In this case, it was good to use a sina plot because its important to not hide anything from the viewer of the chart. There is obviously much fewer medalists than non-medalists so it gives us the impression that their distribution could possibly just come down to random chance than inherent difference due to small sample size.*
+
+**Analysis:**
+
+```{r}
+#| fig-width: 5
+#| fig-height: 7
+#| out-width: "75%"
+
+# This is to change the labels on all plots to make M into Men and F into Women
+labeller = as_labeller(c(M = "Men", F = "Women"))
+
+# This first line orders the rows in triathlon by event count descending and adds that to the ggplot aesthetic. When facet wrapping, the correct order isn't perfectly preserved but is still good enough. Additionally we add lines to remove an unnecessary y-axis label and add a descriptive x-axis label. Last, we facet wrap by sex and include our man and woman labels.
+ggplot(triathlon,aes(y=fct_rev(fct_infreq(team)))) +
+  geom_bar() +
+  scale_y_discrete(name=NULL) +
+  scale_x_continuous(name="Number of Events Participated In") +
+  facet_wrap(~sex, labeller = labeller)
+```
+
+```{r}
+#| fig-width: 5
+#| fig-height: 5
+#| out-width: "75%"
+# This line converts the year column into a factor, effectively discretizing it.
+triathlon = triathlon %>% mutate(year=factor(year))
+
+# These lines set the axes and build the boxplot for height versus year. We add units to the y-axis label to avoid confusion. It uses the same facet wrap as question 1.
+ggplot(triathlon,aes(year,height)) +
+  geom_boxplot() +
+  scale_y_continuous(name="Height (cm)") +
+  facet_wrap(~sex, labeller = labeller)
+```
+
+```{r}
+#| fig-width: 5
+#| fig-height: 5
+#| out-width: "75%"
+
+# We need this library for the sina plot
+library(ggforce)
+
+# Here we set the axes for height versus medalist, and build the violin plot overlaid with a sina plot. We remove the x-axis name because the break labels are descriptive enough. Same y label change as step 2. Same facet wrap as step 1 here as well.
+ggplot(triathlon,aes(medalist,height)) +
+  geom_violin() +
+  geom_sina() +
+  scale_x_discrete(name=NULL) +
+  scale_y_continuous(name="Height (cm)") +
+  facet_wrap(~sex, labeller = labeller)
+```
+
+**Discussion:** *Question 1's chart shows the event totals for many different countries. Perhaps too many to list. However the biggest participants were Australia, Great Britain, and the United States, and there were 10 countries who only had a single athlete compete once.*
+
+*The progression in Question 2's boxplots for women doesn't suggest much change in the heights over time. For the men, we can kind of see an increase in median height to 2008 and a decrease after that. What is very clear is that the male triathletes were taller than their female counterparts the vast majority of the time.*
+
+*Lastly, similar patterns appear between both men and women in the plots for Question 3. The medalists had their densest height in about the same area as non-medalists, and the maximum height of medalists was nearly the same as the maximum height of non-medalists. It's interesting to note however the minimum height of medalists was significantly taller than the minimum height of non-medalists for both.*
