@@ -1,0 +1,179 @@
+---
+title: "Project 3"
+format:
+  typst:
+    fig-format: png
+    fig-dpi: 300
+    fig-width: 6
+    fig-height: 4
+---
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+# !! Do not edit this code chunk !!
+library(tidyverse)
+library(patchwork)
+```
+
+**Introduction:**
+
+In this project we are going to use the Olympics dataset made by Jon Harmon, which includes various information regarding athletes in the modern olympic games from 1896 to 2018. More information about the olympics dataset can be found on the tidytuesday project and on Olympedia. We are trying to answer the following question:
+
+What are the similarities and differences between the relative ages, heights, and weights of athletes in the 5 most common sports in the dataset?
+
+To answer the question we will need to look at the variables sport, age, height, and weight. Sport represents generally the sport an athlete belongs to (not a specific event). Age, height, and weight are characteristics of the athlete in years, cm, and kg respectively.
+
+**Approach:**
+
+To start we need to prepare the data. So first we’ll make a frequency table of the amount of athletes in the dataset for every sport. Then we’ll pull the 5 sports with the highest frequencies from the table and filter the olympics dataset to only include rows in that group. We only need the columns for sport, age, height, and weight so we’ll remove all the others.
+
+Now for the analysis we will perform a principal component analysis on age, height, and weight. First we rescale each variable, so they have a mean of 0 and variance of 1, and then pass them into the prcomp function in R.
+
+Lastly, we are going to visualize the PCA. We’ll make a scatterplot of the first and second principal components, color the points by sport, and overlay the values in the rotation matrix as arrows. This visualization will be very helpful for answering the question because the direction of the arrows relative to the clusters of sports will give us an idea of generally which physical attributes dominate the sport. This plot will be compounded with 3 scatterplots of each possible pairing of variables. This will help us verify the trends we see in the PC plot.
+
+**Analysis:**
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+library(broom)
+library(ggrepel)
+library(cowplot)
+```
+
+```{r message=FALSE}
+
+olympics <- readr::read_csv(
+  'https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2024/2024-08-06/olympics.csv'
+  )
+```
+
+```{r}
+# Frequency table for all sports sorted highest to lowest
+top_sports = olympics |>
+  group_by(sport) |>
+  count() |>
+  arrange(desc(n))
+
+# List of top 5 sports
+top_sports = top_sports[1:5,]$sport
+
+# Remove rows from the original dataset not containing a top 5 sport,
+# and then filter NAs
+top_sports = olympics |>
+  filter(sport %in% top_sports) |>
+  select(sport,age,height,weight) |>
+  na.omit()
+
+# Perform PCA
+pca_fit = top_sports |>
+  select(where(is.numeric)) |>
+  scale() |>
+  prcomp()
+
+# Arrow formatting
+arrow_style <- arrow(
+  angle = 20, length = grid::unit(8, "pt"),
+  ends = "first", type = "closed"
+)
+
+# Storing data to be used for arrow visualization
+arrowdata = pca_fit |>
+  # extract rotation matrix
+  tidy(matrix = "rotation") |>
+  pivot_wider(
+    names_from = "PC", values_from = "value",
+    names_prefix = "PC"
+  )
+
+# Palette to be used
+my_colors = c("#EF476F","#FFD166","#06D6A0","#118AB2","#073B4C")
+```
+
+```{r}
+# Adding arrows from rotation matrix onto PC2 vs PC1 scatterplot and saving
+p1 = ggplot() +
+  geom_point(
+      data=(pca_fit |> augment(top_sports)),
+      aes(.fittedPC1, .fittedPC2,color = sport)
+  ) +
+  geom_segment(
+    data = arrowdata,
+    aes(3*PC1, 3*PC2),
+    xend = 0, yend = 0,
+    arrow = arrow_style,
+    linewidth = .8,
+    color = "white"
+  ) +
+  geom_text_repel(
+    data=arrowdata,
+    aes(3*PC1,3*PC2,label = column),
+    hjust = 0,
+    vjust = 0,
+    colour = "white"
+  ) +
+  labs(
+    caption = "*Arrows extended by multiple of 3 for visual clarity"
+  ) +
+  scale_x_continuous(name = "PC1") +
+  scale_y_continuous(name = "PC2") +
+  scale_color_manual(values = my_colors) +
+  theme_minimal_grid() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    plot.caption = element_text(hjust = 0),
+    plot.background = element_rect(fill = "#F8F8F8")
+  )
+
+# Weight vs Height Scatterplot
+p2 = ggplot(top_sports) + 
+  aes(height,weight,color=sport) +
+  geom_point() +
+  scale_color_manual(values = my_colors) +
+  guides(color="none") +
+  theme_minimal_grid() +
+  theme(
+    plot.background = element_rect(fill = "#F8F8F8")
+  )
+
+# Weight vs Age Scatterplot
+p3 = ggplot(top_sports) + 
+  aes(age,weight,color=sport) +
+  geom_point() +
+  scale_color_manual(values = my_colors) +
+  guides(color="none") +
+  theme_minimal_grid() +
+  theme(
+    plot.background = element_rect(fill = "#F8F8F8")
+  )
+
+# Height vs Age Scatterplot
+p4 = ggplot(top_sports) + 
+  aes(age,height,color=sport) +
+  geom_point() +
+  scale_color_manual(values = my_colors) +
+  guides(color="none") +
+  theme_minimal_grid() +
+  theme(
+    plot.background = element_rect(fill = "#F8F8F8")
+  )
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 8
+#| out-width: "100%"
+
+# Put all the plots together!
+(p1) / (p2 | p3 | p4)
+```
+
+**Discussion:**
+
+The 5 most common sports in the dataset are Athletics, Gymnastics, Cycling, Shooting, and Swimming. For age, shooting athletes are associated strongly with higher age, and swimmers are associated with younger age. Other clusters had no clear indication. Height and weight both point in similar directions so their trends are linked together. Olympians involved in Athletics are associated with higher weight and height, while those in gymnastics are smaller and shorter.
+
+There are some interesting takeaways from the analysis. We see cyclist points all centered in a circle almost around (0,0). It seems to say that they come in all sorts of different builds, and ages. I was also surprised to not see swimmers more associated with height, as I figured that would give an advantage with limb length therefore contributing to speed. It’s also interesting to see how similar the graphs are for weight vs age and the pc2 vs pc1 plot. It suggests that a lot of the variance for all 3 traits can be explained by just those two variables.
